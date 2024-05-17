@@ -140,16 +140,21 @@ func (pkm *Pokemon) Insert(db *sql.DB, pokemon *Pokemon) error {
 	}
 
 	for _, pkmAbility := range pokemon.Abilities {
-		ability := pkmAbility.Ability
-		_, err := tx.Exec("INSERT INTO ability (name, pokeapi_url) VALUES (?, ?)", ability.Name, ability.URL)
-		if err != nil {
-			return fmt.Errorf("failed to insert ability: %w", err)
+		var abilityID int64
+		err := tx.QueryRow("SELECT id FROM ability WHERE name = ?", pkmAbility.Ability.Name).Scan(&abilityID)
+		if err != nil && err != sql.ErrNoRows {
+			return fmt.Errorf("failed to get ability id: %w", err)
 		}
 
-		var abilityID int64
-		err = tx.QueryRow("SELECT id FROM ability WHERE name = ?", ability.Name).Scan(&abilityID)
-		if err != nil {
-			return fmt.Errorf("failed to get ability id: %w", err)
+		if abilityID == 0 {
+			res, err := tx.Exec("INSERT INTO ability (name, pokeapi_url) VALUES (?, ?)", pkmAbility.Ability.Name, pkmAbility.Ability.URL)
+			if err != nil {
+				return fmt.Errorf("failed to insert ability: %w", err)
+			}
+			abilityID, err = res.LastInsertId()
+			if err != nil {
+				return fmt.Errorf("failed to get last insert id for ability: %w", err)
+			}
 		}
 
 		_, err = tx.Exec("INSERT INTO pokemon_ability (pokemon_id, ability_id, is_hidden, slot) VALUES (?, ?, ?, ?)",
@@ -160,16 +165,21 @@ func (pkm *Pokemon) Insert(db *sql.DB, pokemon *Pokemon) error {
 	}
 
 	for _, pkmType := range pokemon.Types {
-		pokemonType := pkmType.Type
-		_, err := tx.Exec("INSERT INTO type (name, pokeapi_url) VALUES (?, ?)", pokemonType.Name, pokemonType.URL)
-		if err != nil {
-			return fmt.Errorf("failed to insert type: %w", err)
+		var typeID int64
+		err := tx.QueryRow("SELECT id FROM type WHERE name = ?", pkmType.Type.Name).Scan(&typeID)
+		if err != nil && err != sql.ErrNoRows {
+			return fmt.Errorf("failed to get type id: %w", err)
 		}
 
-		var typeID int64
-		err = tx.QueryRow("SELECT id FROM type WHERE name = ?", pokemonType.Name).Scan(&typeID)
-		if err != nil {
-			return fmt.Errorf("failed to get type id: %w", err)
+		if typeID == 0 {
+			res, err := tx.Exec("INSERT INTO type (name, pokeapi_url) VALUES (?, ?)", pkmType.Type.Name, pkmType.Type.URL)
+			if err != nil {
+				return fmt.Errorf("failed to insert type: %w", err)
+			}
+			typeID, err = res.LastInsertId()
+			if err != nil {
+				return fmt.Errorf("failed to get last insert id for type: %w", err)
+			}
 		}
 
 		_, err = tx.Exec("INSERT INTO pokemon_type (pokemon_id, type_id, slot) VALUES (?, ?, ?)",
