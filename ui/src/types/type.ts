@@ -5,3 +5,9 @@ export type Type = {
         url: string;
     };
 };
+
+export type TypeStyles = {
+    [key: string]: {
+        backgroundColor: string;
+    };
+};

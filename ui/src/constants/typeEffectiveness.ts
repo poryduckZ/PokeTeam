@@ -1,4 +1,10 @@
-export const typeEffectiveness = {
+type TypeChart = {
+    [type: string]: {
+        [targetType: string]: number;
+    };
+};
+
+export const typeEffectiveness: TypeChart = {
     Normal: {
         Normal: 1,
         Fighting: 2,
