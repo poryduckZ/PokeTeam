@@ -6,11 +6,19 @@ import (
 )
 
 type Pokemon struct {
-	ID        int        `json:"id"`
-	Name      string     `json:"name"`
-	Sprites   Sprite     `json:"sprites"`
-	Abilities []Ability  `json:"abilities"`
-	Types     []TypeInfo `json:"types"`
+	ID        int       `json:"id"`
+	Name      string    `json:"name"`
+	Sprite    Sprite    `json:"sprites"`
+	Abilities []Ability `json:"abilities"`
+	Types     []Type    `json:"types"`
+}
+
+type PokemonRes struct {
+	ID        int          `json:"id"`
+	Name      string       `json:"name"`
+	Sprite    Sprite       `json:"sprites"`
+	Abilities []AbilityRes `json:"abilities"`
+	Types     []TypeRes    `json:"types"`
 }
 
 type Sprite struct {
@@ -26,7 +34,11 @@ type Ability struct {
 	} `json:"ability"`
 }
 
-type TypeInfo struct {
+type AbilityRes struct {
+	Name string `json:"name"`
+}
+
+type Type struct {
 	Slot int `json:"slot"`
 	Type struct {
 		Name string `json:"name"`
@@ -34,7 +46,11 @@ type TypeInfo struct {
 	} `json:"type"`
 }
 
-func (pkm *Pokemon) Get(db *sql.DB, name string) (*Pokemon, error) {
+type TypeRes struct {
+	Name string `json:"name"`
+}
+
+func (pkm *PokemonRes) Get(db *sql.DB, name string) (*PokemonRes, error) {
 	query := `
 		SELECT p.id, p.name, p.sprite_url 
 		FROM pokemon p 
@@ -42,7 +58,7 @@ func (pkm *Pokemon) Get(db *sql.DB, name string) (*Pokemon, error) {
 	`
 	row := db.QueryRow(query, name)
 
-	var pokemon Pokemon
+	var pokemon PokemonRes
 	var spriteURL string
 
 	if err := row.Scan(&pokemon.ID, &pokemon.Name, &spriteURL); err != nil {
@@ -52,7 +68,7 @@ func (pkm *Pokemon) Get(db *sql.DB, name string) (*Pokemon, error) {
 		return nil, fmt.Errorf("failed to scan row: %w", err)
 	}
 
-	pokemon.Sprites.FrontDefault = spriteURL
+	pokemon.Sprite.FrontDefault = spriteURL
 
 	if err := pkm.getPokemonAbilities(db, &pokemon); err != nil {
 		return nil, fmt.Errorf("failed to get abilities: %w", err)
@@ -65,9 +81,9 @@ func (pkm *Pokemon) Get(db *sql.DB, name string) (*Pokemon, error) {
 	return &pokemon, nil
 }
 
-func (pkm *Pokemon) getPokemonAbilities(db *sql.DB, pokemon *Pokemon) error {
+func (pkm *PokemonRes) getPokemonAbilities(db *sql.DB, pokemon *PokemonRes) error {
 	query := `
-		SELECT pa.is_hidden, pa.slot, a.name, a.pokeapi_url
+		SELECT a.name
 		FROM pokemon_ability pa
 		JOIN ability a ON pa.ability_id = a.id
 		WHERE pa.pokemon_id = ?
@@ -80,8 +96,8 @@ func (pkm *Pokemon) getPokemonAbilities(db *sql.DB, pokemon *Pokemon) error {
 	defer rows.Close()
 
 	for rows.Next() {
-		var ability Ability
-		if err := rows.Scan(&ability.IsHidden, &ability.Slot, &ability.Ability.Name, &ability.Ability.URL); err != nil {
+		var ability AbilityRes
+		if err := rows.Scan(&ability.Name); err != nil {
 			return err
 		}
 		pokemon.Abilities = append(pokemon.Abilities, ability)
@@ -90,9 +106,9 @@ func (pkm *Pokemon) getPokemonAbilities(db *sql.DB, pokemon *Pokemon) error {
 	return rows.Err()
 }
 
-func (pkm *Pokemon) getPokemonTypes(db *sql.DB, pokemon *Pokemon) error {
+func (pkm *PokemonRes) getPokemonTypes(db *sql.DB, pokemon *PokemonRes) error {
 	query := `
-		SELECT pt.slot, t.name, t.pokeapi_url
+		SELECT t.name
 		FROM pokemon_type pt
 		JOIN type t ON pt.type_id = t.id
 		WHERE pt.pokemon_id = ?
@@ -105,8 +121,8 @@ func (pkm *Pokemon) getPokemonTypes(db *sql.DB, pokemon *Pokemon) error {
 	defer rows.Close()
 
 	for rows.Next() {
-		var typeInfo TypeInfo
-		if err := rows.Scan(&typeInfo.Slot, &typeInfo.Type.Name, &typeInfo.Type.URL); err != nil {
+		var typeInfo TypeRes
+		if err := rows.Scan(&typeInfo.Name); err != nil {
 			return err
 		}
 		pokemon.Types = append(pokemon.Types, typeInfo)
@@ -123,7 +139,7 @@ func (pkm *Pokemon) Insert(db *sql.DB, pokemon *Pokemon) error {
 	defer tx.Rollback()
 
 	res, err := tx.Exec("INSERT INTO pokemon (pokeapi_id, name, sprite_url) VALUES (?, ?, ?)",
-		pokemon.ID, pokemon.Name, pokemon.Sprites.FrontDefault)
+		pokemon.ID, pokemon.Name, pokemon.Sprite.FrontDefault)
 	if err != nil {
 		return fmt.Errorf("failed to insert pokemon: %w", err)
 	}
@@ -194,4 +210,24 @@ func (pkm *Pokemon) Insert(db *sql.DB, pokemon *Pokemon) error {
 	}
 
 	return nil
+}
+
+func (pkm *Pokemon) MapPokemonToPokemonRes(pokemon *Pokemon, pokemonRes *PokemonRes) (*PokemonRes, error) {
+	pokemonRes.ID = pokemon.ID
+	pokemonRes.Name = pokemon.Name
+	pokemonRes.Sprite.FrontDefault = pokemon.Sprite.FrontDefault
+
+	for _, ability := range pokemon.Abilities {
+		pokemonRes.Abilities = append(pokemonRes.Abilities, AbilityRes{
+			Name: ability.Ability.Name,
+		})
+	}
+
+	for _, pkmType := range pokemon.Types {
+		pokemonRes.Types = append(pokemonRes.Types, TypeRes{
+			Name: pkmType.Type.Name,
+		})
+	}
+
+	return pokemonRes, nil
 }

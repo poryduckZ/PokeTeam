@@ -36,13 +36,13 @@ func (app *App) GetPokemonHandler(w http.ResponseWriter, r *http.Request, _ http
 	json.NewEncoder(w).Encode(pokemon)
 }
 
-func (app *App) FetchPokemon(db *sql.DB, name string) (*models.Pokemon, error) {
+func (app *App) FetchPokemon(db *sql.DB, name string) (*models.PokemonRes, error) {
 	if pkm, found := app.cache.Get(name); found {
 		app.infoLog.Printf("Retrieved from cache for %s", name)
-		return pkm.(*models.Pokemon), nil
+		return pkm.(*models.PokemonRes), nil
 	}
 
-	pkm := &models.Pokemon{}
+	pkm := &models.PokemonRes{}
 	pokemon, err := pkm.Get(db, name)
 	if err != nil {
 		return nil, err
@@ -76,5 +76,9 @@ func (app *App) FetchPokemon(db *sql.DB, name string) (*models.Pokemon, error) {
 
 	app.infoLog.Printf("Retrieved from PokeAPI for %s", name)
 
-	return &pokemonFromAPI, nil
+	pokemonResFromApi, err := pokemonFromAPI.MapPokemonToPokemonRes(&pokemonFromAPI, pkm)
+	if err != nil {
+		return nil, err
+	}
+	return pokemonResFromApi, nil
 }
