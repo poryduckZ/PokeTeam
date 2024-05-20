@@ -23,12 +23,11 @@ func (app *App) GetPokemonHandler(w http.ResponseWriter, r *http.Request, _ http
 
 	pokemon, err := app.FetchPokemon(app.DB, name)
 	if err != nil {
+		if err.Error() == "pokemon not found: "+name { // TODO: refactor to use errors.Is and proper Error type
+			app.notFound(w)
+			return
+		}
 		app.serverError(w, err)
-		return
-	}
-
-	if pokemon == nil {
-		app.notFound(w)
 		return
 	}
 
@@ -58,6 +57,10 @@ func (app *App) FetchPokemon(db *sql.DB, name string) (*models.PokemonRes, error
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("pokemon not found: %s", name)
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to fetch pokemon data from PokeAPI: %s", resp.Status)
