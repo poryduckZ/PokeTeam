@@ -17,6 +17,13 @@ CREATE TABLE type (
     pokeapi_url VARCHAR(255) NOT NULL
 );
 
+CREATE TABLE damage_relations (
+    type_id INTEGER,
+    relation_type VARCHAR(255),
+    related_type_name VARCHAR(255),
+    FOREIGN KEY (type_id) REFERENCES type(id)
+);
+
 CREATE TABLE pokemon_ability (
     pokemon_id INT NOT NULL,
     ability_id INT NOT NULL,

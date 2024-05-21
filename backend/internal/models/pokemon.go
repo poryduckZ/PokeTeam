@@ -2,7 +2,11 @@ package models
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
 )
 
 type Pokemon struct {
@@ -41,9 +45,24 @@ type AbilityRes struct {
 type Type struct {
 	Slot int `json:"slot"`
 	Type struct {
-		Name string `json:"name"`
-		URL  string `json:"url"`
+		Name            string          `json:"name"`
+		URL             string          `json:"url"`
+		DamageRelations DamageRelations `json:"damage_relations"`
 	} `json:"type"`
+}
+
+type DamageRelations struct {
+	DoubleDamageFrom []RelationType `json:"double_damage_from"`
+	DoubleDamageTo   []RelationType `json:"double_damage_to"`
+	HalfDamageFrom   []RelationType `json:"half_damage_from"`
+	HalfDamageTo     []RelationType `json:"half_damage_to"`
+	NoDamageFrom     []RelationType `json:"no_damage_from"`
+	NoDamageTo       []RelationType `json:"no_damage_to"`
+}
+
+type RelationType struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
 }
 
 type TypeRes struct {
@@ -188,7 +207,17 @@ func (pkm *Pokemon) Insert(db *sql.DB, pokemon *Pokemon) error {
 		}
 
 		if typeID == 0 {
-			res, err := tx.Exec("INSERT INTO type (name, pokeapi_url) VALUES (?, ?)", pkmType.Type.Name, pkmType.Type.URL)
+			typeID, err = strconv.ParseInt(pkmType.Type.URL[strings.LastIndex(pkmType.Type.URL, "/")+1:], 10, 64)
+			if err != nil {
+				return fmt.Errorf("failed to parse type ID from URL: %w", err)
+			}
+
+			fetchedType, err := fetchTypeDetails(typeID)
+			if err != nil {
+				return fmt.Errorf("error fetching type details: %w", err)
+			}
+
+			res, err := tx.Exec("INSERT INTO type (name, pokeapi_url) VALUES (?, ?)", fetchedType.Type.Name, fetchedType.Type.URL)
 			if err != nil {
 				return fmt.Errorf("failed to insert type: %w", err)
 			}
@@ -198,8 +227,7 @@ func (pkm *Pokemon) Insert(db *sql.DB, pokemon *Pokemon) error {
 			}
 		}
 
-		_, err = tx.Exec("INSERT INTO pokemon_type (pokemon_id, type_id, slot) VALUES (?, ?, ?)",
-			pokemonID, typeID, pkmType.Slot)
+		_, err = tx.Exec("INSERT INTO pokemon_type (pokemon_id, type_id, slot) VALUES (?, ?, ?)", pokemonID, typeID, pkmType.Slot)
 		if err != nil {
 			return fmt.Errorf("failed to insert pokemon type: %w", err)
 		}
@@ -210,6 +238,26 @@ func (pkm *Pokemon) Insert(db *sql.DB, pokemon *Pokemon) error {
 	}
 
 	return nil
+}
+
+func fetchTypeDetails(typeID int64) (*Type, error) {
+	resp, err := http.Get(fmt.Sprintf("https://pokeapi.co/api/v2/type/%d", typeID))
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch type from API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("received non-200 response from API: %s", resp.Status)
+	}
+
+	var pkmType Type
+	err = json.NewDecoder(resp.Body).Decode(&pkmType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode API response: %w", err)
+	}
+
+	return &pkmType, nil
 }
 
 func (pkm *Pokemon) MapPokemonToPokemonRes(pokemon *Pokemon, pokemonRes *PokemonRes) (*PokemonRes, error) {
